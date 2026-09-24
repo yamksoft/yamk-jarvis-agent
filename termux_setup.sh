@@ -16,7 +16,7 @@ if [ -d "livekit-jarvis-server" ]; then
     cd livekit-jarvis-server
     git pull
 else
-    git clone https://github.com/yamksoft/livekit-jarvis-server.git
+    git clone https://github.com/yamksoft/yamk-jarvis-agent.git
     cd livekit-jarvis-server
 fi
 

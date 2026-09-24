@@ -55,7 +55,7 @@ $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";"
 # Check if we are inside the project folder, if not, clone it.
 if (!(Test-Path "$PSScriptRoot\jarvis\src\agent.py")) {
     Write-Host "Repository not found in current directory. Cloning from GitHub..." -ForegroundColor Yellow
-    git clone https://github.com/yamksoft/livekit-jarvis-server.git
+    git clone https://github.com/yamksoft/yamk-jarvis-agent.git
     if (Test-Path "$PSScriptRoot\livekit-jarvis-server") {
         Set-Location "$PSScriptRoot\livekit-jarvis-server"
     } else {

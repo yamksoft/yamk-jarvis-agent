@@ -403,7 +403,7 @@ index 0000000..5bab735
 +## Step 1: Clone the Repository
 +If you haven't already, clone this repository to your Ubuntu machine and navigate into it:
 +```bash
-+git clone https://github.com/yamksoft/livekit-jarvis-server.git
++git clone https://github.com/yamksoft/yamk-jarvis-agent.git
 +cd livekit-jarvis-server
 +```
 +*(Note: You can actually run the setup script directly on a fresh Ubuntu machine by creating `setup_ubuntu.sh` and it will automatically clone the repo for you if it's missing!)*
@@ -17056,7 +17056,7 @@ index 0000000..c682e62
 +# Clone repository if we are not inside one
 +if [ ! -f "$SCRIPT_DIR/jarvis/src/agent.py" ]; then
 +    echo "Repository not found in current directory. Cloning from GitHub..."
-+    git clone https://github.com/yamksoft/livekit-jarvis-server.git
++    git clone https://github.com/yamksoft/yamk-jarvis-agent.git
 +    cd livekit-jarvis-server
 +    SCRIPT_DIR="$(pwd)"
 +else
@@ -17186,7 +17186,7 @@ index 0000000..aa51190
 +# Check if we are inside the project folder, if not, clone it.
 +if (!(Test-Path "$PSScriptRoot\jarvis\src\agent.py")) {
 +    Write-Host "Repository not found in current directory. Cloning from GitHub..." -ForegroundColor Yellow
-+    git clone https://github.com/yamksoft/livekit-jarvis-server.git
++    git clone https://github.com/yamksoft/yamk-jarvis-agent.git
 +    if (Test-Path "$PSScriptRoot\livekit-jarvis-server") {
 +        Set-Location "$PSScriptRoot\livekit-jarvis-server"
 +    } else {
@@ -17439,7 +17439,7 @@ index 0000000..d9f9cb6
 +    cd livekit-jarvis-server
 +    git pull
 +else
-+    git clone https://github.com/yamksoft/livekit-jarvis-server.git
++    git clone https://github.com/yamksoft/yamk-jarvis-agent.git
 +    cd livekit-jarvis-server
 +fi
 +

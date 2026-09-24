@@ -7,7 +7,7 @@ This guide is designed for beginners. You do not need to install anything manual
 ## Step 1: Clone the Repository
 If you haven't already, clone this repository to your Ubuntu machine and navigate into it:
 ```bash
-git clone https://github.com/yamksoft/livekit-jarvis-server.git
+git clone https://github.com/yamksoft/yamk-jarvis-agent.git
 cd livekit-jarvis-server
 ```
 *(Note: You can actually run the setup script directly on a fresh Ubuntu machine by creating `setup_ubuntu.sh` and it will automatically clone the repo for you if it's missing!)*

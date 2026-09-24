@@ -28,7 +28,7 @@ fi
 # Clone repository if we are not inside one
 if [ ! -f "$SCRIPT_DIR/jarvis/src/agent.py" ]; then
     echo "Repository not found in current directory. Cloning from GitHub..."
-    git clone https://github.com/yamksoft/livekit-jarvis-server.git
+    git clone https://github.com/yamksoft/yamk-jarvis-agent.git
     cd livekit-jarvis-server
     SCRIPT_DIR="$(pwd)"
 else

@@ -128,6 +128,20 @@ class AgentScreen extends StatelessWidget {
                   bottom: 110,
                   child: Center(child: AgentStatusIndicator(hideWhenConnected: true)),
                 ),
+              // Add a config button in the top right
+              Positioned(
+                top: 50,
+                right: 20,
+                child: IconButton(
+                  icon: const Icon(Icons.settings),
+                  onPressed: () {
+                    final appCtrl = ctx.read<AppCtrl>();
+                    appCtrl.disconnect(); // Disconnect before going to setup
+                    appCtrl.appScreenState = AppScreenState.setup;
+                    appCtrl.notifyListeners();
+                  },
+                ),
+              ),
             ],
           ),
         ),

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'controllers/app_ctrl.dart';
 import 'screens/agent_screen.dart';
+import 'screens/setup_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'ui/color_pallette.dart' show LKColorPaletteLight, LKColorPaletteDark;
 import 'widgets/app_layout_switcher.dart';
@@ -58,14 +59,16 @@ class VoiceAssistantApp extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext ctx) => MultiProvider(
-        providers: [
-          ChangeNotifierProvider.value(value: appCtrl),
-          ChangeNotifierProvider.value(value: appCtrl.session),
-          ChangeNotifierProvider.value(value: appCtrl.roomContext),
-        ],
-        child: components.SessionContext(
-          session: appCtrl.session,
+  Widget build(BuildContext ctx) => ChangeNotifierProvider.value(
+        value: appCtrl,
+        child: Consumer<AppCtrl>(
+          builder: (ctx, appCtrlState, child) => MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: appCtrlState.session),
+              ChangeNotifierProvider.value(value: appCtrlState.roomContext),
+            ],
+            child: components.SessionContext(
+              session: appCtrlState.session,
           child: MaterialApp(
             title: 'Voice Assistant',
             theme: buildTheme(isLight: true),
@@ -80,9 +83,10 @@ class VoiceAssistantApp extends StatelessWidget {
                       Selector<AppCtrl, AppScreenState>(
                         selector: (ctx, appCtx) => appCtx.appScreenState,
                         builder: (ctx, screen, _) => AppLayoutSwitcher(
-                          frontBuilder: (ctx) => const WelcomeScreen(),
-                          backBuilder: (ctx) => const AgentScreen(),
-                          isFront: screen == AppScreenState.welcome,
+                          screenState: screen,
+                          setupBuilder: (ctx) => const SetupScreen(),
+                          welcomeBuilder: (ctx) => const WelcomeScreen(),
+                          agentBuilder: (ctx) => const AgentScreen(),
                         ),
                       ),
                       const SessionErrorBanner(),
@@ -93,5 +97,7 @@ class VoiceAssistantApp extends StatelessWidget {
             ),
           ),
         ),
-      );
+      ),
+    ),
+  );
 }

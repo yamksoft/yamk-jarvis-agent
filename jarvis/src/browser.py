@@ -159,6 +159,12 @@ class BrowserManager:
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(
             headless=self._headless,
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+            ],
         )
         self._context = await self._browser.new_context()
         self._page = await self._context.new_page()

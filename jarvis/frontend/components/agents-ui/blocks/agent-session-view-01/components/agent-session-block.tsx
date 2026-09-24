@@ -10,6 +10,8 @@ import {
 } from '@/components/agents-ui/agent-control-bar';
 import { cn } from '@/lib/shadcn/utils';
 import { TileLayout } from './tile-view';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 
 const BOTTOM_VIEW_MOTION_PROPS: MotionProps = {
   variants: {
@@ -207,6 +209,18 @@ export function AgentSessionView_01({
       className={cn('relative z-10 h-full w-full overflow-hidden', className)}
       {...props}
     >
+      {/* Config Button */}
+      <div className="absolute top-4 right-4 z-50">
+        <Button
+          size="sm"
+          variant="outline"
+          asChild
+          className="rounded-full font-mono text-xs font-bold tracking-wider uppercase border-gray-700 bg-transparent text-gray-400 hover:text-white"
+        >
+          <Link href="/setup">⚙️ Config</Link>
+        </Button>
+      </div>
+
       <Fade top className="absolute inset-x-4 top-0 z-10 h-40" />
       {/* transcript */}
       <AnimatePresence>

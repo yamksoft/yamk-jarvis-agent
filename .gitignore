@@ -2,10 +2,15 @@
 .env
 .env.*
 !.env.example
+active_mode.txt
 
 # OS
 .DS_Store
 Thumbs.db
+livekit-server-win/
+livekit-server-linux/
+livekit-server.zip
+livekit-server.tar.gz
 
 # Python
 __pycache__/

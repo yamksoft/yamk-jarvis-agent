@@ -7,10 +7,12 @@ import 'package:livekit_components/livekit_components.dart' as components;
 import 'package:logging/logging.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 
 final String homepageAgentTokenEndpoint = 'https://livekit.com/api/homepage-agent/token';
 
-enum AppScreenState { welcome, agent }
+enum AppScreenState { setup, welcome, agent }
 
 enum AgentScreenState { visualizer, transcription }
 
@@ -22,6 +24,11 @@ class AppCtrl extends ChangeNotifier {
   AppScreenState appScreenState = AppScreenState.welcome;
   AgentScreenState agentScreenState = AgentScreenState.visualizer;
 
+  // Configuration
+  String? livekitUrl;
+  String? apiKey;
+  String? apiSecret;
+
   //Test
   bool isUserCameEnabled = false;
   bool isScreenshareEnabled = false;
@@ -29,41 +36,51 @@ class AppCtrl extends ChangeNotifier {
   final messageCtrl = TextEditingController();
   final messageFocusNode = FocusNode();
 
-  late final sdk.Room room = sdk.Room(roomOptions: const sdk.RoomOptions(enableVisualizer: true));
-  late final roomContext = components.RoomContext(room: room);
-  late final sdk.Session session = _createSession(room: room);
+  late sdk.Room room = sdk.Room(roomOptions: const sdk.RoomOptions(enableVisualizer: true));
+  late components.RoomContext roomContext = components.RoomContext(room: room);
+  late sdk.Session session;
 
-  static sdk.Session _createSession({required sdk.Room room}) {
-    // Development-only hardcoded credentials (optional).
-    const hardcodedServerUrl = null; // e.g. 'wss://your-host'
-    const hardcodedToken = null; // e.g. 'eyJ...'
-
-    if (hardcodedServerUrl != null && hardcodedToken != null) {
-      return sdk.Session.fromFixedTokenSource(
-        sdk.LiteralTokenSource(
-          serverUrl: hardcodedServerUrl,
-          participantToken: hardcodedToken,
-        ),
-        options: sdk.SessionOptions(room: room),
-      );
+  String? _generateToken() {
+    if (apiKey == null || apiSecret == null || apiKey!.isEmpty || apiSecret!.isEmpty) {
+      return null;
     }
 
-    final sandboxId = dotenv.env['LIVEKIT_SANDBOX_ID']?.replaceAll('"', '');
-    final agentName = dotenv.env['LIVEKIT_AGENT_NAME']?.replaceAll('"', '').trim();
-    final agentDeployment = dotenv.env['LIVEKIT_AGENT_DEPLOYMENT']?.replaceAll('"', '').trim();
-    sdk.EndpointTokenSource tokenSource;
-    if (sandboxId == null || sandboxId.isEmpty || sandboxId == '<your-sandbox-id>') {
-      tokenSource = sdk.EndpointTokenSource(url: Uri.parse(homepageAgentTokenEndpoint));
-    } else {
-      tokenSource = sdk.DevelopmentTokenSource(id: sandboxId);
+    final jwt = JWT({
+      'exp': (DateTime.now().millisecondsSinceEpoch ~/ 1000) + 3600,
+      'iss': apiKey,
+      'nbf': 0,
+      'sub': 'user-${uuid.v4()}',
+      'video': {
+        'room': 'voice_assistant_room_${DateTime.now().millisecondsSinceEpoch}',
+        'roomJoin': true,
+        'canPublish': true,
+        'canPublishData': true,
+        'canSubscribe': true,
+      }
+    });
+
+    return jwt.sign(SecretKey(apiSecret!));
+  }
+
+  sdk.Session _createSession({required sdk.Room room}) {
+    // Check if user has entered custom credentials
+    if (livekitUrl != null && apiKey != null && apiSecret != null) {
+      final token = _generateToken();
+      if (token != null) {
+        return sdk.Session.fromFixedTokenSource(
+          sdk.LiteralTokenSource(
+            serverUrl: livekitUrl!,
+            participantToken: token,
+          ),
+          options: sdk.SessionOptions(room: room),
+        );
+      }
     }
 
+    // Fallback to LiveKit Homepage Agent if no credentials
     return sdk.Session.fromConfigurableTokenSource(
-      tokenSource,
-      tokenOptions: sdk.TokenRequestOptions(
-        agentName: agentName?.isEmpty ?? true ? null : agentName,
-        agentDeployment: agentDeployment?.isEmpty ?? true ? null : agentDeployment,
-      ),
+      sdk.EndpointTokenSource(url: Uri.parse(homepageAgentTokenEndpoint)),
+      tokenOptions: const sdk.TokenRequestOptions(),
       options: sdk.SessionOptions(room: room),
     );
   }
@@ -88,7 +105,50 @@ class AppCtrl extends ChangeNotifier {
       }
     });
 
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    livekitUrl = prefs.getString('livekitUrl');
+    apiKey = prefs.getString('apiKey');
+    apiSecret = prefs.getString('apiSecret');
+
+    if (livekitUrl == null || livekitUrl!.isEmpty) {
+      appScreenState = AppScreenState.setup;
+    } else {
+      appScreenState = AppScreenState.welcome;
+    }
+
+    session = _createSession(room: room);
     session.addListener(_handleSessionChange);
+    notifyListeners();
+  }
+
+  Future<void> saveSettings({required String url, required String key, required String secret}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('livekitUrl', url);
+    await prefs.setString('apiKey', key);
+    await prefs.setString('apiSecret', secret);
+    
+    livekitUrl = url;
+    apiKey = key;
+    apiSecret = secret;
+
+    // Dispose old session and room to clear handlers
+    session.removeListener(_handleSessionChange);
+    await session.dispose();
+    await room.dispose();
+    roomContext.dispose();
+
+    // Recreate fresh room and session with new credentials
+    room = sdk.Room(roomOptions: const sdk.RoomOptions(enableVisualizer: true));
+    roomContext = components.RoomContext(room: room);
+    session = _createSession(room: room);
+    session.addListener(_handleSessionChange);
+
+    // Notify listeners so app.dart rebuilds with new session and roomContext
+    notifyListeners();
   }
 
   Future<void> cleanUp() async {

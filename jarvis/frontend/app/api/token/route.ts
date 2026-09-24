@@ -9,35 +9,63 @@ type ConnectionDetails = {
   participantToken: string;
 };
 
-// NOTE: you are expected to define the following environment variables in `.env.local`:
-const API_KEY = process.env.LIVEKIT_API_KEY;
-const API_SECRET = process.env.LIVEKIT_API_SECRET;
-const LIVEKIT_URL = process.env.LIVEKIT_URL;
+import fs from 'fs';
+
+import path from 'path';
+
+// Helper to dynamically load env variables based on active mode
+function getDynamicEnv() {
+  try {
+    let mode = 'local';
+    const cwd = process.cwd();
+    try {
+      mode = fs.readFileSync(path.join(cwd, '..', 'active_mode.txt'), 'utf-8').trim();
+    } catch (e) {
+      // ignore, stick to local
+    }
+    const envPath = path.join(cwd, `.env.${mode}`);
+    const content = fs.readFileSync(envPath, 'utf-8');
+    const env: Record<string, string> = {};
+    content.split('\n').forEach(line => {
+      const match = line.match(/^([^=#]+)=(.*)$/);
+      if (match) {
+        env[match[1].trim()] = match[2].trim();
+      }
+    });
+    return env;
+  } catch (err) {
+    console.error("Could not load dynamic env, falling back to process.env", err);
+    return process.env;
+  }
+}
 
 // don't cache the results
 export const revalidate = 0;
 
 export async function POST(req: Request) {
-  // make an exception for the vercel preview environment
-  if (process.env.NODE_ENV !== 'development' && process.env.IS_VERCEL_PREVIEW !== 'true') {
-    throw new Error(
-      'THIS API ROUTE IS INSECURE. DO NOT USE THIS ROUTE IN PRODUCTION WITHOUT AN AUTHENTICATION LAYER.'
-    );
+  const dynamicEnv = getDynamicEnv();
+  const API_KEY = dynamicEnv.LIVEKIT_API_KEY;
+  const API_SECRET = dynamicEnv.LIVEKIT_API_SECRET;
+  let LIVEKIT_URL = dynamicEnv.LIVEKIT_URL;
+  const CLIENT_URL = dynamicEnv.NEXT_PUBLIC_LIVEKIT_URL || LIVEKIT_URL;
+
+  // Auto-translate localhost to livekit-server when running inside Docker
+  if (fs.existsSync('/.dockerenv') && LIVEKIT_URL?.includes('localhost')) {
+    LIVEKIT_URL = LIVEKIT_URL.replace('localhost', 'livekit-server');
   }
 
   try {
-    if (LIVEKIT_URL === undefined) {
-      throw new Error('LIVEKIT_URL is not defined');
-    }
-    if (API_KEY === undefined) {
-      throw new Error('LIVEKIT_API_KEY is not defined');
-    }
-    if (API_SECRET === undefined) {
-      throw new Error('LIVEKIT_API_SECRET is not defined');
-    }
+    if (!LIVEKIT_URL) throw new Error('LIVEKIT_URL is not defined');
+    if (!API_KEY) throw new Error('LIVEKIT_API_KEY is not defined');
+    if (!API_SECRET) throw new Error('LIVEKIT_API_SECRET is not defined');
 
     // Parse room config from request body.
-    const body = await req.json();
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch (e) {
+      // Ignore if body is empty or invalid JSON
+    }
     const roomConfig = body?.room_config
       ? RoomConfiguration.fromJson(body.room_config, { ignoreUnknownFields: true })
       : new RoomConfiguration();
@@ -50,12 +78,16 @@ export async function POST(req: Request) {
     const participantToken = await createParticipantToken(
       { identity: participantIdentity, name: participantName },
       roomName,
-      roomConfig
+      roomConfig,
+      API_KEY,
+      API_SECRET
     );
+
+    if (!CLIENT_URL) throw new Error('CLIENT_URL is not defined');
 
     // Return connection details
     const data: ConnectionDetails = {
-      serverUrl: LIVEKIT_URL,
+      serverUrl: CLIENT_URL,
       roomName,
       participantName,
       participantToken,
@@ -75,9 +107,11 @@ export async function POST(req: Request) {
 function createParticipantToken(
   userInfo: AccessTokenOptions,
   roomName: string,
-  roomConfig: RoomConfiguration | undefined
+  roomConfig: RoomConfiguration | undefined,
+  apiKey: string,
+  apiSecret: string
 ): Promise<string> {
-  const at = new AccessToken(API_KEY, API_SECRET, {
+  const at = new AccessToken(apiKey, apiSecret, {
     ...userInfo,
     ttl: '15m',
   });

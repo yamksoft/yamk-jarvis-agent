@@ -64,6 +64,15 @@ class WelcomeScreen extends StatelessWidget {
                     );
                   },
                 ),
+                TextButton.icon(
+                  onPressed: () {
+                    final appCtrl = ctx.read<ctrl.AppCtrl>();
+                    appCtrl.appScreenState = ctrl.AppScreenState.setup;
+                    appCtrl.notifyListeners();
+                  },
+                  icon: const Icon(Icons.settings, size: 16),
+                  label: const Text('Configuration'),
+                ),
               ],
             ),
           ),

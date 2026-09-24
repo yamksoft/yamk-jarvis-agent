@@ -1,91 +1,154 @@
-<img src="./.github/assets/app-icon.png" alt="Voice assistant app icon" width="100" height="100">
+# Jarvis - Voice AI Butler
 
-# Flutter Agent Starter
+A voice-controlled AI butler built on the **LiveKit Agents** framework. Speak to Jarvis, and it responds with a sarcastic British-butler persona while having full control over a real web browser — browsing, searching, clicking, typing, and completing tasks on your behalf.
 
-This starter app template for [LiveKit Agents](https://docs.livekit.io/agents/overview/) provides a simple voice interface using the [LiveKit Flutter SDK](https://github.com/livekit/client-sdk-flutter). It supports [voice](https://docs.livekit.io/agents/start/voice-ai/), [transcriptions](https://docs.livekit.io/agents/build/text/), [live video input](https://docs.livekit.io/agents/build/vision/#video), and [virtual avatars](https://docs.livekit.io/agents/integrations/avatar/).
+## Features
 
-This template is compatible with iOS, macOS, Android, and web. It is free for you to use or modify as you see fit.
+- **Voice Conversations** — Real-time voice I/O powered by LiveKit with adaptive interruptions and preemptive generation
+- **Gemini 3.1 Flash Live** — Uses Google's realtime model with a British English voice ("Enceladus")
+- **Browser Control** — Full Playwright-powered Chromium automation with 11 tools:
+  - `open_url` / `search_the_web` / `read_page` / `inspect_page`
+  - `go_back` / `take_screenshot`
+  - `click` / `type_text` / `scroll` / `press_key`
+  - `confirm_browser_action` (safety gate for consequential actions)
+- **Video Input** — Camera support for the agent to "see" you
+- **Butler Persona** — Sarcastic British-butler personality with hardcoded easter eggs
+- **Multi-Client Support** — React web frontend, Flutter mobile app, and console mode
+- **Animated HUD Background** — Custom circuit-board/particle SVG animation in the web UI
 
-<img src="./.github/assets/screenshot.png" alt="Voice Assistant Screenshot" height="500">
+## Project Structure
 
-## Getting started
+```
+jarvis_updated_test/
+├── jarvis_new/                 # Main project
+│   ├── src/
+│   │   ├── agent.py            # Entrypoint — AgentServer, Assistant class
+│   │   ├── browser.py          # BrowserManager (Playwright Chromium)
+│   │   ├── tools.py            # 11 browser function tools
+│   │   ├── prompts.py          # System prompts and instructions
+│   │   └── __init__.py
+│   ├── tests/                  # Agent evals, browser tests, prompt tests
+│   ├── frontend/               # Next.js/React web UI
+│   │   ├── app/                # Next.js app routes
+│   │   ├── components/         # Agents UI, audio visualizers, HUD background
+│   │   ├── hooks/              # LiveKit client hooks
+│   │   └── package.json
+│   ├── pyproject.toml          # Python deps (managed with uv)
+│   ├── uv.lock                 # Lockfile
+│   ├── Dockerfile              # Multi-stage production build
+│   ├── .env.example            # Environment variable template
+│   ├── .env.local              # Local credentials (gitignored)
+│   ├── AGENTS.md               # Coding agent guide
+│   └── plan.md                 # Architecture planning doc
+│
+└── agent-starter-flutter/      # Flutter mobile client
+    ├── lib/                    # Dart source
+    ├── pubspec.yaml            # Flutter deps
+    └── web/                    # Web build output
+```
 
+## Prerequisites
 
-This will create a new Flutter project in the current directory. Install dependencies and run the app:
+- **Python** >= 3.10
+- **[uv](https://docs.astral.sh/uv/)** package manager
+- **[pnpm](https://pnpm.io/)** (for the React frontend)
+- **Flutter SDK** >= 3.5.1 (for the mobile app)
+- **Node.js** >= 20
+
+## Installation
+
+### 1. Python Agent
+
 ```bash
+cd jarvis_new
+uv sync
+uv run playwright install chromium
+```
+
+### 2. React Web Frontend
+
+```bash
+cd jarvis_new/frontend
+pnpm install
+```
+
+### 3. Flutter Mobile App (Optional)
+
+```bash
+cd agent-starter-flutter
 flutter pub get
+```
+
+## Configuration
+
+Copy the example environment file and fill in your credentials:
+
+```bash
+cd jarvis_new
+cp .env.example .env.local
+```
+
+Required environment variables:
+
+| Variable | Description |
+|---|---|
+| `LIVEKIT_URL` | Your LiveKit Cloud WebSocket URL (e.g. `wss://your-project.livekit.cloud`) |
+| `LIVEKIT_API_KEY` | LiveKit API key |
+| `LIVEKIT_API_SECRET` | LiveKit API secret |
+| `GOOGLE_API_KEY` | Google AI API key (for Gemini) |
+
+The React frontend also expects `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and `LIVEKIT_URL` in its own `.env.local`.
+
+## Running
+
+### Agent (Python)
+
+```bash
+cd jarvis_new
+
+# Development mode (connects to LiveKit dev server)
+uv run src/agent.py dev
+
+# Console mode (terminal-based voice chat)
+uv run src/agent.py console
+
+#### Important run your agent before running the frontend!
+
+### Web Frontend
+
+```bash
+cd jarvis_new/frontend
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### Flutter App
+
+```bash
+cd agent-starter-flutter
 flutter run
 ```
 
-Note: You may need to configure signing certificates in Xcode if building to a real iOS device.
+## Architecture
 
-The app is configured to connect to the LiveKit homepage agent by default, which you can also try at [livekit.com](https://www.livekit.com). To point the app at your own agent (see [Connect to your agent](#connect-to-your-agent)).
+Jarvis uses **LiveKit's realtime agent framework** with function tools:
 
-> [!NOTE]
-> To setup without the LiveKit CLI, clone the repository and then either create the `assets/.env` file manually from a copy of `.env.example`. The env file is optional: without any configuration, the app connects to a default agent — the same one featured on the [LiveKit homepage](https://livekit.io) — so you can try it out right away.
+1. **Voice Pipeline**: User speaks → LiveKit streams audio → AI Coustics denoises → Gemini Realtime processes
+2. **Tool Calling**: Gemini invokes browser tools via LiveKit's function tool system
+3. **Browser**: Playwright Chromium instance (headless in production, visible locally) managed per-room with serialized async operations
 
-## Connect to your agent
+The agent is designed to recognize named sites (YouTube, Google, Amazon) and open them directly rather than searching via DuckDuckGo.
 
-To switch from the default agent to your own, you first need a LiveKit agent to speak with. For a no-code setup, use the [Agent Builder](https://docs.livekit.io/agents/start/builder/). For more customization, try our starter agent for [Python](https://github.com/livekit-examples/agent-starter-python), [Node.js](https://github.com/livekit-examples/agent-starter-node), or [create your own from scratch](https://docs.livekit.io/agents/start/voice-ai/).
+## Tech Stack
 
-Second, you need a token server. For development, the easiest option is the [sandbox token server](https://docs.livekit.io/frontends/authentication/tokens/sandbox-token-server/): enable it from your project's **Options** on the [Settings](https://cloud.livekit.io/projects/p_/settings/project) page in LiveKit Cloud and copy the `sandboxId`.
-
-Then fill the `LIVEKIT_SANDBOX_ID` in your `assets/.env`:
-
-```swift
-LIVEKIT_SANDBOX_ID=<your-sandbox-id>
-```
-
-or modify `lib/controllers/app_ctrl.dart` to replace the `SandboxTokenSource` with your own token source implementation (development-only hardcoded credentials are also supported there).
-
-## Feature overview
-
-This starter app supports several features of the agents framework and is intended as a base you can adapt for your own use case.
-
-### Text, video, and voice input
-
-This app supports:
-
-- **Voice**: send microphone audio to your agent. **Requires microphone permissions.**
-- **Text**: send text input using the message bar.
-- **Video**: optionally share camera and/or screen share tracks to the room so your agent can process visual input (requires an agent/model that supports it).
-
-Related docs:
-
-- Voice agents: https://docs.livekit.io/agents/start/voice-ai/
-- Text: https://docs.livekit.io/agents/build/text/
-- Vision/video: https://docs.livekit.io/agents/build/vision/#video
-- Screen share: https://docs.livekit.io/home/client/tracks/screenshare/
-
-If you have trouble with screen sharing, refer to the docs linked above for more setup instructions.
-
-### Session
-
-The app is built around two core concepts:
-
-- `livekit_client.Session`: connects to LiveKit, dispatches/observes the agent, and provides a message history via `session.messages` as well as helpers like `session.sendText(...)`.
-- `livekit_components.RoomContext` / `MediaDeviceContext`: manages local media tracks (microphone, camera, screen share) and their lifecycle.
-
-### Preconnect audio buffer
-
-This app enables `preConnectAudio` by default to capture and buffer audio before the room connection completes. This allows the connection to appear "instant" from the user's perspective and makes the app more responsive.
-
-To disable this feature, set `preConnectAudio` to `false` in `SessionOptions` when creating the `Session` (see `lib/controllers/app_ctrl.dart`).
-
-### Virtual avatar / agent video
-
-If your agent publishes a video track (for example via a [virtual avatar](https://docs.livekit.io/agents/integrations/avatar/) integration), the app renders the agent's video when available and falls back to an audio visualizer otherwise.
-
-## Token generation in production
-
-In a production environment, you will be responsible for developing a solution to [generate tokens for your users](https://docs.livekit.io/home/server/generating-tokens/) that integrates with your authentication system.
-
-You should replace the `SandboxTokenSource` in `lib/controllers/app_ctrl.dart` with an `EndpointTokenSource` or your own `TokenSourceFixed` / `TokenSourceConfigurable` implementation. You can also use `.cached()` to cache valid tokens and avoid unnecessary token requests.
-
-## Running on Simulator / Emulator
-
-To use this template with video (or screen sharing) input, you may need to run the app on a physical device depending on platform and simulator/emulator capabilities. Testing on Simulator/Emulator will still support voice and text modes.
-
-## Contributing
-
-This template is open source and we welcome contributions! Please open a PR or issue through GitHub, and don't forget to join us in the [LiveKit Community Slack](https://livekit.io/join-slack)!
+| Component | Technology |
+|---|---|
+| Agent Framework | LiveKit Agents 1.6.10 |
+| LLM | Google Gemini 3.1 Flash Live |
+| Browser Automation | Playwright (Chromium) |
+| Noise Cancellation | AI Coustics |
+| Web Frontend | Next.js 15, React 19, Tailwind CSS v4 |
+| Mobile Client | Flutter, Dart 3.5 |
+| Package Manager | uv (Python), pnpm (JS) |
+| Language | Python 3.14, TypeScript 5, Dart 3.5 |

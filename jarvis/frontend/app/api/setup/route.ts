@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
 import { exec } from 'child_process';
-import util from 'util';
+import { promises as fs } from 'fs';
 import path from 'path';
+import util from 'util';
 
 const execPromise = util.promisify(exec);
 
@@ -62,7 +62,7 @@ AGENT_NAME=${cloud.agentName || 'my-agent'}
     // 2. Write files
     await fs.writeFile(backendEnvLocalPath, backendLocalContent, 'utf-8');
     await fs.writeFile(frontendEnvLocalPath, frontendLocalContent, 'utf-8');
-    
+
     await fs.writeFile(backendEnvCloudPath, backendCloudContent, 'utf-8');
     await fs.writeFile(frontendEnvCloudPath, frontendCloudContent, 'utf-8');
 
@@ -73,12 +73,16 @@ AGENT_NAME=${cloud.agentName || 'my-agent'}
     try {
       if (mode === 'cloud') {
         // Stop the local livekit server on Docker, Windows, and Linux
-        await execPromise('docker stop livekit-jarvis-server-livekit-server-1 || true').catch(() => {});
+        await execPromise('docker stop livekit-jarvis-server-livekit-server-1 || true').catch(
+          () => {}
+        );
         await execPromise('taskkill /F /IM livekit-server.exe || true').catch(() => {});
         await execPromise('killall livekit-server || true').catch(() => {});
       } else {
         // Start the local livekit server on Docker
-        await execPromise('docker start livekit-jarvis-server-livekit-server-1 || true').catch(() => {});
+        await execPromise('docker start livekit-jarvis-server-livekit-server-1 || true').catch(
+          () => {}
+        );
       }
     } catch (error) {
       console.error('Error managing LiveKit server:', error);
@@ -88,7 +92,7 @@ AGENT_NAME=${cloud.agentName || 'my-agent'}
     try {
       // Docker/Linux Supervisor
       await execPromise('supervisorctl restart backend || true').catch(() => {});
-      
+
       // If running locally in 'dev' mode, touching agent.py forces it to hot-reload
       const agentPyPath = path.join(cwd, '..', 'src', 'agent.py');
       const now = new Date();

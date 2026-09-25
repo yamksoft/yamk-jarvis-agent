@@ -1,0 +1,546 @@
+Changes:
+
+diff --git a/Changes b/Changes
+new file mode 100644
+index 0000000..e69de29
+diff --git a/jarvis/frontend/app/api/setup/route.ts b/jarvis/frontend/app/api/setup/route.ts
+index 6d583ff..0e80fcf 100644
+--- a/jarvis/frontend/app/api/setup/route.ts
++++ b/jarvis/frontend/app/api/setup/route.ts
+@@ -1,8 +1,8 @@
+ import { NextResponse } from 'next/server';
+-import { promises as fs } from 'fs';
+ import { exec } from 'child_process';
+-import util from 'util';
++import { promises as fs } from 'fs';
+ import path from 'path';
++import util from 'util';
+ 
+ const execPromise = util.promisify(exec);
+ 
+@@ -62,7 +62,7 @@ AGENT_NAME=${cloud.agentName || 'my-agent'}
+     // 2. Write files
+     await fs.writeFile(backendEnvLocalPath, backendLocalContent, 'utf-8');
+     await fs.writeFile(frontendEnvLocalPath, frontendLocalContent, 'utf-8');
+-    
++
+     await fs.writeFile(backendEnvCloudPath, backendCloudContent, 'utf-8');
+     await fs.writeFile(frontendEnvCloudPath, frontendCloudContent, 'utf-8');
+ 
+@@ -73,12 +73,16 @@ AGENT_NAME=${cloud.agentName || 'my-agent'}
+     try {
+       if (mode === 'cloud') {
+         // Stop the local livekit server on Docker, Windows, and Linux
+-        await execPromise('docker stop livekit-jarvis-server-livekit-server-1 || true').catch(() => {});
++        await execPromise('docker stop livekit-jarvis-server-livekit-server-1 || true').catch(
++          () => {}
++        );
+         await execPromise('taskkill /F /IM livekit-server.exe || true').catch(() => {});
+         await execPromise('killall livekit-server || true').catch(() => {});
+       } else {
+         // Start the local livekit server on Docker
+-        await execPromise('docker start livekit-jarvis-server-livekit-server-1 || true').catch(() => {});
++        await execPromise('docker start livekit-jarvis-server-livekit-server-1 || true').catch(
++          () => {}
++        );
+       }
+     } catch (error) {
+       console.error('Error managing LiveKit server:', error);
+@@ -88,7 +92,7 @@ AGENT_NAME=${cloud.agentName || 'my-agent'}
+     try {
+       // Docker/Linux Supervisor
+       await execPromise('supervisorctl restart backend || true').catch(() => {});
+-      
++
+       // If running locally in 'dev' mode, touching agent.py forces it to hot-reload
+       const agentPyPath = path.join(cwd, '..', 'src', 'agent.py');
+       const now = new Date();
+diff --git a/jarvis/frontend/app/api/token/route.ts b/jarvis/frontend/app/api/token/route.ts
+index 255191e..ad6f80f 100644
+--- a/jarvis/frontend/app/api/token/route.ts
++++ b/jarvis/frontend/app/api/token/route.ts
+@@ -1,5 +1,7 @@
+ import { NextResponse } from 'next/server';
++import fs from 'fs';
+ import { AccessToken, type AccessTokenOptions, type VideoGrant } from 'livekit-server-sdk';
++import path from 'path';
+ import { RoomConfiguration } from '@livekit/protocol';
+ 
+ type ConnectionDetails = {
+@@ -9,10 +11,6 @@ type ConnectionDetails = {
+   participantToken: string;
+ };
+ 
+-import fs from 'fs';
+-
+-import path from 'path';
+-
+ // Helper to dynamically load env variables based on active mode
+ function getDynamicEnv() {
+   try {
+@@ -26,7 +24,7 @@ function getDynamicEnv() {
+     const envPath = path.join(cwd, `.env.${mode}`);
+     const content = fs.readFileSync(envPath, 'utf-8');
+     const env: Record<string, string> = {};
+-    content.split('\n').forEach(line => {
++    content.split('\n').forEach((line) => {
+       const match = line.match(/^([^=#]+)=(.*)$/);
+       if (match) {
+         env[match[1].trim()] = match[2].trim();
+@@ -34,7 +32,7 @@ function getDynamicEnv() {
+     });
+     return env;
+   } catch (err) {
+-    console.error("Could not load dynamic env, falling back to process.env", err);
++    console.error('Could not load dynamic env, falling back to process.env', err);
+     return process.env;
+   }
+ }
+@@ -60,10 +58,14 @@ export async function POST(req: Request) {
+     if (!API_SECRET) throw new Error('LIVEKIT_API_SECRET is not defined');
+ 
+     // Parse room config from request body.
+-    let body: any = {};
++    type TokenRequestBody = {
++      room_config?: Parameters<typeof RoomConfiguration.fromJson>[0];
++    };
++
++    let body: TokenRequestBody = {};
+     try {
+-      body = await req.json();
+-    } catch (e) {
++      body = (await req.json()) as TokenRequestBody;
++    } catch {
+       // Ignore if body is empty or invalid JSON
+     }
+     const roomConfig = body?.room_config
+diff --git a/jarvis/frontend/app/api/token/route.ts.backup-before-jsonvalue-fix b/jarvis/frontend/app/api/token/route.ts.backup-before-jsonvalue-fix
+new file mode 100644
+index 0000000..baa826e
+--- /dev/null
++++ b/jarvis/frontend/app/api/token/route.ts.backup-before-jsonvalue-fix
+@@ -0,0 +1,130 @@
++import { NextResponse } from 'next/server';
++import fs from 'fs';
++import { AccessToken, type AccessTokenOptions, type VideoGrant } from 'livekit-server-sdk';
++import path from 'path';
++import { RoomConfiguration } from '@livekit/protocol';
++
++type ConnectionDetails = {
++  serverUrl: string;
++  roomName: string;
++  participantName: string;
++  participantToken: string;
++};
++
++// Helper to dynamically load env variables based on active mode
++function getDynamicEnv() {
++  try {
++    let mode = 'local';
++    const cwd = process.cwd();
++    try {
++      mode = fs.readFileSync(path.join(cwd, '..', 'active_mode.txt'), 'utf-8').trim();
++    } catch (e) {
++      // ignore, stick to local
++    }
++    const envPath = path.join(cwd, `.env.${mode}`);
++    const content = fs.readFileSync(envPath, 'utf-8');
++    const env: Record<string, string> = {};
++    content.split('\n').forEach((line) => {
++      const match = line.match(/^([^=#]+)=(.*)$/);
++      if (match) {
++        env[match[1].trim()] = match[2].trim();
++      }
++    });
++    return env;
++  } catch (err) {
++    console.error('Could not load dynamic env, falling back to process.env', err);
++    return process.env;
++  }
++}
++
++// don't cache the results
++export const revalidate = 0;
++
++export async function POST(req: Request) {
++  const dynamicEnv = getDynamicEnv();
++  const API_KEY = dynamicEnv.LIVEKIT_API_KEY;
++  const API_SECRET = dynamicEnv.LIVEKIT_API_SECRET;
++  let LIVEKIT_URL = dynamicEnv.LIVEKIT_URL;
++  const CLIENT_URL = dynamicEnv.NEXT_PUBLIC_LIVEKIT_URL || LIVEKIT_URL;
++
++  // Auto-translate localhost to livekit-server when running inside Docker
++  if (fs.existsSync('/.dockerenv') && LIVEKIT_URL?.includes('localhost')) {
++    LIVEKIT_URL = LIVEKIT_URL.replace('localhost', 'livekit-server');
++  }
++
++  try {
++    if (!LIVEKIT_URL) throw new Error('LIVEKIT_URL is not defined');
++    if (!API_KEY) throw new Error('LIVEKIT_API_KEY is not defined');
++    if (!API_SECRET) throw new Error('LIVEKIT_API_SECRET is not defined');
++
++    // Parse room config from request body.
++    let body: Record<string, unknown> = {};
++    try {
++      body = await req.json();
++    } catch (e) {
++      // Ignore if body is empty or invalid JSON
++    }
++    const roomConfig = body?.room_config
++      ? RoomConfiguration.fromJson(body.room_config, { ignoreUnknownFields: true })
++      : new RoomConfiguration();
++
++    // Generate participant token
++    const participantName = 'user';
++    const participantIdentity = `voice_assistant_user_${Math.floor(Math.random() * 10_000)}`;
++    const roomName = `voice_assistant_room_${Math.floor(Math.random() * 10_000)}`;
++
++    const participantToken = await createParticipantToken(
++      { identity: participantIdentity, name: participantName },
++      roomName,
++      roomConfig,
++      API_KEY,
++      API_SECRET
++    );
++
++    if (!CLIENT_URL) throw new Error('CLIENT_URL is not defined');
++
++    // Return connection details
++    const data: ConnectionDetails = {
++      serverUrl: CLIENT_URL,
++      roomName,
++      participantName,
++      participantToken,
++    };
++    const headers = new Headers({
++      'Cache-Control': 'no-store',
++    });
++    return NextResponse.json(data, { headers });
++  } catch (error) {
++    if (error instanceof Error) {
++      console.error(error);
++      return new NextResponse(error.message, { status: 500 });
++    }
++  }
++}
++
++function createParticipantToken(
++  userInfo: AccessTokenOptions,
++  roomName: string,
++  roomConfig: RoomConfiguration | undefined,
++  apiKey: string,
++  apiSecret: string
++): Promise<string> {
++  const at = new AccessToken(apiKey, apiSecret, {
++    ...userInfo,
++    ttl: '15m',
++  });
++  const grant: VideoGrant = {
++    room: roomName,
++    roomJoin: true,
++    canPublish: true,
++    canPublishData: true,
++    canSubscribe: true,
++  };
++  at.addGrant(grant);
++
++  if (roomConfig) {
++    at.roomConfig = roomConfig;
++  }
++
++  return at.toJwt();
++}
+diff --git a/jarvis/frontend/app/page.tsx b/jarvis/frontend/app/page.tsx
+index 72e5baa..6c56451 100644
+--- a/jarvis/frontend/app/page.tsx
++++ b/jarvis/frontend/app/page.tsx
+@@ -1,15 +1,15 @@
+ import { headers } from 'next/headers';
+-import { App } from '@/components/app/app';
+-import { getAppConfig } from '@/lib/utils';
+ import { redirect } from 'next/navigation';
+ import fs from 'fs';
+ import path from 'path';
++import { App } from '@/components/app/app';
++import { getAppConfig } from '@/lib/utils';
+ 
+ export default async function Page() {
+   // Check if configuration exists
+   const cwd = process.cwd();
+   const activeModePath = path.join(cwd, '..', 'active_mode.txt');
+-  
++
+   if (!fs.existsSync(activeModePath)) {
+     redirect('/setup');
+   }
+diff --git a/jarvis/frontend/app/setup/page.tsx b/jarvis/frontend/app/setup/page.tsx
+index eee9e40..0674405 100644
+--- a/jarvis/frontend/app/setup/page.tsx
++++ b/jarvis/frontend/app/setup/page.tsx
+@@ -17,7 +17,7 @@ export default function SetupPage() {
+     googleApiKey: 'your_gemini_api_key',
+     frontendServerUrl: 'http://localhost:7880',
+     frontendClientUrl: 'ws://localhost:7880',
+-    agentName: 'my-agent'
++    agentName: 'my-agent',
+   });
+ 
+   // Cloud config state
+@@ -28,7 +28,7 @@ export default function SetupPage() {
+     googleApiKey: 'your_gemini_api_key',
+     frontendServerUrl: 'https://your-project.livekit.cloud',
+     frontendClientUrl: 'wss://your-project.livekit.cloud',
+-    agentName: 'my-agent'
++    agentName: 'my-agent',
+   });
+ 
+   const handleSubmit = async (e: React.FormEvent) => {
+@@ -39,7 +39,7 @@ export default function SetupPage() {
+       const res = await fetch('/api/setup', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({ mode, local: localConfig, cloud: cloudConfig })
++        body: JSON.stringify({ mode, local: localConfig, cloud: cloudConfig }),
+       });
+ 
+       if (!res.ok) {
+@@ -60,7 +60,7 @@ export default function SetupPage() {
+ 
+   return (
+     <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4 dark:bg-gray-950">
+-      <div className="w-full max-w-2xl rounded-2xl bg-white p-8 shadow-xl dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
++      <div className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-white p-8 shadow-xl dark:border-gray-800 dark:bg-gray-900">
+         <h1 className="mb-2 text-3xl font-bold text-gray-900 dark:text-white">Connection Setup</h1>
+         <p className="mb-8 text-gray-500 dark:text-gray-400">
+           Choose your operating mode and provide the required environment variables.
+@@ -68,12 +68,38 @@ export default function SetupPage() {
+ 
+         <form onSubmit={handleSubmit} className="space-y-6">
+           <div className="flex gap-4">
+-            <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 p-4 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800" style={{ borderColor: mode === 'local' ? '#3b82f6' : 'transparent', backgroundColor: mode === 'local' ? 'rgba(59, 130, 246, 0.05)' : '' }}>
+-              <input type="radio" name="mode" value="local" checked={mode === 'local'} onChange={() => setMode('local')} className="hidden" />
++            <label
++              className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 p-4 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
++              style={{
++                borderColor: mode === 'local' ? '#3b82f6' : 'transparent',
++                backgroundColor: mode === 'local' ? 'rgba(59, 130, 246, 0.05)' : '',
++              }}
++            >
++              <input
++                type="radio"
++                name="mode"
++                value="local"
++                checked={mode === 'local'}
++                onChange={() => setMode('local')}
++                className="hidden"
++              />
+               <div className="text-lg font-semibold">Local Offline Mode</div>
+             </label>
+-            <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 p-4 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800" style={{ borderColor: mode === 'cloud' ? '#3b82f6' : 'transparent', backgroundColor: mode === 'cloud' ? 'rgba(59, 130, 246, 0.05)' : '' }}>
+-              <input type="radio" name="mode" value="cloud" checked={mode === 'cloud'} onChange={() => setMode('cloud')} className="hidden" />
++            <label
++              className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 p-4 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
++              style={{
++                borderColor: mode === 'cloud' ? '#3b82f6' : 'transparent',
++                backgroundColor: mode === 'cloud' ? 'rgba(59, 130, 246, 0.05)' : '',
++              }}
++            >
++              <input
++                type="radio"
++                name="mode"
++                value="cloud"
++                checked={mode === 'cloud'}
++                onChange={() => setMode('cloud')}
++                className="hidden"
++              />
+               <div className="text-lg font-semibold">Cloud Online Mode</div>
+             </label>
+           </div>
+@@ -81,33 +107,85 @@ export default function SetupPage() {
+           <div className="space-y-4 rounded-xl border border-gray-100 bg-gray-50/50 p-6 dark:border-gray-800 dark:bg-gray-900/50">
+             {mode === 'local' ? (
+               <>
+-                <h2 className="text-xl font-semibold mb-4">Local Configuration</h2>
++                <h2 className="mb-4 text-xl font-semibold">Local Configuration</h2>
+                 <div className="grid gap-4 sm:grid-cols-2">
+-                  <Input label="LiveKit API Key" value={localConfig.livekitApiKey} onChange={v => setLocalConfig({...localConfig, livekitApiKey: v})} />
+-                  <Input label="LiveKit API Secret" value={localConfig.livekitApiSecret} type="password" onChange={v => setLocalConfig({...localConfig, livekitApiSecret: v})} />
+-                  <Input label="Backend LiveKit URL" value={localConfig.backendLivekitUrl} onChange={v => setLocalConfig({...localConfig, backendLivekitUrl: v})} />
+-                  <Input label="Frontend Server URL" value={localConfig.frontendServerUrl} onChange={v => setLocalConfig({...localConfig, frontendServerUrl: v})} />
+-                  <Input label="Frontend Client URL" value={localConfig.frontendClientUrl} onChange={v => setLocalConfig({...localConfig, frontendClientUrl: v})} />
+-                  <Input label="Google Gemini API Key" value={localConfig.googleApiKey} type="password" onChange={v => setLocalConfig({...localConfig, googleApiKey: v})} />
++                  <Input
++                    label="LiveKit API Key"
++                    value={localConfig.livekitApiKey}
++                    onChange={(v) => setLocalConfig({ ...localConfig, livekitApiKey: v })}
++                  />
++                  <Input
++                    label="LiveKit API Secret"
++                    value={localConfig.livekitApiSecret}
++                    type="password"
++                    onChange={(v) => setLocalConfig({ ...localConfig, livekitApiSecret: v })}
++                  />
++                  <Input
++                    label="Backend LiveKit URL"
++                    value={localConfig.backendLivekitUrl}
++                    onChange={(v) => setLocalConfig({ ...localConfig, backendLivekitUrl: v })}
++                  />
++                  <Input
++                    label="Frontend Server URL"
++                    value={localConfig.frontendServerUrl}
++                    onChange={(v) => setLocalConfig({ ...localConfig, frontendServerUrl: v })}
++                  />
++                  <Input
++                    label="Frontend Client URL"
++                    value={localConfig.frontendClientUrl}
++                    onChange={(v) => setLocalConfig({ ...localConfig, frontendClientUrl: v })}
++                  />
++                  <Input
++                    label="Google Gemini API Key"
++                    value={localConfig.googleApiKey}
++                    type="password"
++                    onChange={(v) => setLocalConfig({ ...localConfig, googleApiKey: v })}
++                  />
+                 </div>
+               </>
+             ) : (
+               <>
+-                <h2 className="text-xl font-semibold mb-4">Cloud Configuration</h2>
++                <h2 className="mb-4 text-xl font-semibold">Cloud Configuration</h2>
+                 <div className="grid gap-4 sm:grid-cols-2">
+-                  <Input label="LiveKit API Key" value={cloudConfig.livekitApiKey} onChange={v => setCloudConfig({...cloudConfig, livekitApiKey: v})} />
+-                  <Input label="LiveKit API Secret" value={cloudConfig.livekitApiSecret} type="password" onChange={v => setCloudConfig({...cloudConfig, livekitApiSecret: v})} />
+-                  <Input label="Backend LiveKit URL (WSS)" value={cloudConfig.backendLivekitUrl} onChange={v => setCloudConfig({...cloudConfig, backendLivekitUrl: v})} />
+-                  <Input label="Frontend Server URL (HTTPS)" value={cloudConfig.frontendServerUrl} onChange={v => setCloudConfig({...cloudConfig, frontendServerUrl: v})} />
+-                  <Input label="Frontend Client URL (WSS)" value={cloudConfig.frontendClientUrl} onChange={v => setCloudConfig({...cloudConfig, frontendClientUrl: v})} />
+-                  <Input label="Google Gemini API Key" value={cloudConfig.googleApiKey} type="password" onChange={v => setCloudConfig({...cloudConfig, googleApiKey: v})} />
++                  <Input
++                    label="LiveKit API Key"
++                    value={cloudConfig.livekitApiKey}
++                    onChange={(v) => setCloudConfig({ ...cloudConfig, livekitApiKey: v })}
++                  />
++                  <Input
++                    label="LiveKit API Secret"
++                    value={cloudConfig.livekitApiSecret}
++                    type="password"
++                    onChange={(v) => setCloudConfig({ ...cloudConfig, livekitApiSecret: v })}
++                  />
++                  <Input
++                    label="Backend LiveKit URL (WSS)"
++                    value={cloudConfig.backendLivekitUrl}
++                    onChange={(v) => setCloudConfig({ ...cloudConfig, backendLivekitUrl: v })}
++                  />
++                  <Input
++                    label="Frontend Server URL (HTTPS)"
++                    value={cloudConfig.frontendServerUrl}
++                    onChange={(v) => setCloudConfig({ ...cloudConfig, frontendServerUrl: v })}
++                  />
++                  <Input
++                    label="Frontend Client URL (WSS)"
++                    value={cloudConfig.frontendClientUrl}
++                    onChange={(v) => setCloudConfig({ ...cloudConfig, frontendClientUrl: v })}
++                  />
++                  <Input
++                    label="Google Gemini API Key"
++                    value={cloudConfig.googleApiKey}
++                    type="password"
++                    onChange={(v) => setCloudConfig({ ...cloudConfig, googleApiKey: v })}
++                  />
+                 </div>
+               </>
+             )}
+           </div>
+ 
+           <div className="flex justify-end pt-4">
+-            <Button type="submit" disabled={loading} className="px-8 py-6 text-lg w-full">
++            <Button type="submit" disabled={loading} className="w-full px-8 py-6 text-lg">
+               {loading ? 'Saving...' : 'Save & Apply Configuration'}
+             </Button>
+           </div>
+@@ -117,7 +195,17 @@ export default function SetupPage() {
+   );
+ }
+ 
+-function Input({ label, value, type = 'text', onChange }: { label: string, value: string, type?: string, onChange: (v: string) => void }) {
++function Input({
++  label,
++  value,
++  type = 'text',
++  onChange,
++}: {
++  label: string;
++  value: string;
++  type?: string;
++  onChange: (v: string) => void;
++}) {
+   return (
+     <div className="flex flex-col gap-1.5">
+       <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+@@ -125,7 +213,7 @@ function Input({ label, value, type = 'text', onChange }: { label: string, value
+         type={type}
+         value={value}
+         onChange={(e) => onChange(e.target.value)}
+-        className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
++        className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-950 dark:text-white"
+         required
+       />
+     </div>
+diff --git a/jarvis/frontend/components/agents-ui/blocks/agent-session-view-01/components/agent-session-block.tsx b/jarvis/frontend/components/agents-ui/blocks/agent-session-view-01/components/agent-session-block.tsx
+index 02f4757..cfb88b8 100644
+--- a/jarvis/frontend/components/agents-ui/blocks/agent-session-view-01/components/agent-session-block.tsx
++++ b/jarvis/frontend/components/agents-ui/blocks/agent-session-view-01/components/agent-session-block.tsx
+@@ -1,6 +1,7 @@
+ 'use client';
+ 
+ import React, { useEffect, useRef, useState } from 'react';
++import Link from 'next/link';
+ import { AnimatePresence, type MotionProps, motion } from 'motion/react';
+ import { useAgent, useSessionContext, useSessionMessages } from '@livekit/components-react';
+ import { AgentChatTranscript } from '@/components/agents-ui/agent-chat-transcript';
+@@ -8,10 +9,9 @@ import {
+   AgentControlBar,
+   type AgentControlBarControls,
+ } from '@/components/agents-ui/agent-control-bar';
++import { Button } from '@/components/ui/button';
+ import { cn } from '@/lib/shadcn/utils';
+ import { TileLayout } from './tile-view';
+-import { Button } from '@/components/ui/button';
+-import Link from 'next/link';
+ 
+ const BOTTOM_VIEW_MOTION_PROPS: MotionProps = {
+   variants: {
+@@ -215,7 +215,7 @@ export function AgentSessionView_01({
+           size="sm"
+           variant="outline"
+           asChild
+-          className="rounded-full font-mono text-xs font-bold tracking-wider uppercase border-gray-700 bg-transparent text-gray-400 hover:text-white"
++          className="rounded-full border-gray-700 bg-transparent font-mono text-xs font-bold tracking-wider text-gray-400 uppercase hover:text-white"
+         >
+           <Link href="/setup">⚙️ Config</Link>
+         </Button>
+diff --git a/jarvis/frontend/components/app/welcome-view.tsx b/jarvis/frontend/components/app/welcome-view.tsx
+index dc62798..1f58bc4 100644
+--- a/jarvis/frontend/components/app/welcome-view.tsx
++++ b/jarvis/frontend/components/app/welcome-view.tsx
+@@ -1,5 +1,5 @@
+-import { Button } from '@/components/ui/button';
+ import Link from 'next/link';
++import { Button } from '@/components/ui/button';
+ 
+ function WelcomeImage() {
+   return (
+@@ -45,12 +45,12 @@ export const WelcomeView = ({
+         >
+           {startButtonText}
+         </Button>
+-        
++
+         <Button
+           size="sm"
+           variant="outline"
+           asChild
+-          className="mt-4 w-64 rounded-full font-mono text-xs font-bold tracking-wider uppercase border-gray-700 bg-transparent text-gray-400 hover:text-white"
++          className="mt-4 w-64 rounded-full border-gray-700 bg-transparent font-mono text-xs font-bold tracking-wider text-gray-400 uppercase hover:text-white"
+         >
+           <Link href="/setup">⚙️ Configuration</Link>
+         </Button>

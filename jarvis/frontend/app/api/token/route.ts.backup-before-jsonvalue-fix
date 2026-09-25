@@ -58,14 +58,10 @@ export async function POST(req: Request) {
     if (!API_SECRET) throw new Error('LIVEKIT_API_SECRET is not defined');
 
     // Parse room config from request body.
-    type TokenRequestBody = {
-      room_config?: Parameters<typeof RoomConfiguration.fromJson>[0];
-    };
-
-    let body: TokenRequestBody = {};
+    let body: Record<string, unknown> = {};
     try {
-      body = (await req.json()) as TokenRequestBody;
-    } catch {
+      body = await req.json();
+    } catch (e) {
       // Ignore if body is empty or invalid JSON
     }
     const roomConfig = body?.room_config

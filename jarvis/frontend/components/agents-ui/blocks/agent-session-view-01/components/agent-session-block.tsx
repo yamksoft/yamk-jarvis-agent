@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { AnimatePresence, type MotionProps, motion } from 'motion/react';
 import { useAgent, useSessionContext, useSessionMessages } from '@livekit/components-react';
 import { AgentChatTranscript } from '@/components/agents-ui/agent-chat-transcript';
@@ -8,10 +9,9 @@ import {
   AgentControlBar,
   type AgentControlBarControls,
 } from '@/components/agents-ui/agent-control-bar';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/shadcn/utils';
 import { TileLayout } from './tile-view';
-import { Button } from '@/components/ui/button';
-import Link from 'next/link';
 
 const BOTTOM_VIEW_MOTION_PROPS: MotionProps = {
   variants: {
@@ -215,7 +215,7 @@ export function AgentSessionView_01({
           size="sm"
           variant="outline"
           asChild
-          className="rounded-full font-mono text-xs font-bold tracking-wider uppercase border-gray-700 bg-transparent text-gray-400 hover:text-white"
+          className="rounded-full border-gray-700 bg-transparent font-mono text-xs font-bold tracking-wider text-gray-400 uppercase hover:text-white"
         >
           <Link href="/setup">⚙️ Config</Link>
         </Button>

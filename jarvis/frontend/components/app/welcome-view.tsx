@@ -1,5 +1,5 @@
-import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 
 function WelcomeImage() {
   return (
@@ -45,12 +45,12 @@ export const WelcomeView = ({
         >
           {startButtonText}
         </Button>
-        
+
         <Button
           size="sm"
           variant="outline"
           asChild
-          className="mt-4 w-64 rounded-full font-mono text-xs font-bold tracking-wider uppercase border-gray-700 bg-transparent text-gray-400 hover:text-white"
+          className="mt-4 w-64 rounded-full border-gray-700 bg-transparent font-mono text-xs font-bold tracking-wider text-gray-400 uppercase hover:text-white"
         >
           <Link href="/setup">⚙️ Configuration</Link>
         </Button>

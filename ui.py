@@ -256,7 +256,8 @@ class _SysMetrics:
         self.gpu  = -1.0  
         self.tmp  = -1.0  
         self._lock = threading.Lock()
-        self._last_net = psutil.net_io_counters()
+        self._net_warning_logged = False
+        self._last_net = self._read_net_io_counters()
         self._last_net_t = time.time()
         self._running = True
         # Probe caches — GPU (NVML) and temperature (WMI) are the expensive
@@ -272,6 +273,18 @@ class _SysMetrics:
         t = threading.Thread(target=self._loop, daemon=True)
         t.start()
 
+    def _read_net_io_counters(self):
+        try:
+            counters = psutil.net_io_counters()
+        except OSError as exc:
+            if not self._net_warning_logged:
+                print(f"[Metrics] Network counters unavailable: {exc}")
+                self._net_warning_logged = True
+            return None
+
+        self._net_warning_logged = False
+        return counters
+
     def _loop(self):
         while self._running:
             try:
@@ -284,16 +297,19 @@ class _SysMetrics:
         cpu = psutil.cpu_percent(interval=None)
         mem = psutil.virtual_memory().percent
 
-        nc  = psutil.net_io_counters()
+        nc  = self._read_net_io_counters()
         now = time.time()
         dt  = now - self._last_net_t
-        if dt > 0:
+        if nc is None or self._last_net is None:
+            net = 0.0
+        elif dt > 0:
             sent = (nc.bytes_sent - self._last_net.bytes_sent) / dt
             recv = (nc.bytes_recv - self._last_net.bytes_recv) / dt
             net  = (sent + recv) / (1024 * 1024)
         else:
             net = 0.0
-        self._last_net   = nc
+        if nc is not None:
+            self._last_net = nc
         self._last_net_t = now
 
         # GPU and temperature change slowly and are the most expensive probes
@@ -3982,15 +3998,13 @@ class MainWindow(QMainWindow):
         lay.addStretch()
 
         mid = QVBoxLayout(); mid.setSpacing(1)
-        _disp = self._assistant_name.upper()
+        _disp = "YAMK-JARVIS-AGENT"
         self._title_lbl = QLabel(_disp)
         self._title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._title_lbl.setFont(QFont("Courier New", 17, QFont.Weight.Bold))
         self._title_lbl.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         mid.addWidget(self._title_lbl)
-        _sub_text = ("A Friendly Assistant"
-                     if _disp in ("YAMK", "J.A.R.V.I.S")
-                     else "Personal AI Assistant")
+        _sub_text = "وكيل جارفس يمك (معك)"
         self._sub_lbl = QLabel(_sub_text)
         self._sub_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._sub_lbl.setFont(QFont("Courier New", 7))
@@ -5598,6 +5612,10 @@ class _RootShim:
 
 class YamkUI:
     def __init__(self, face_path: str, size=None):
+        qpa_plugin_path = os.environ.get("QT_QPA_PLATFORM_PLUGIN_PATH", "")
+        if "/cv2/qt/plugins" in qpa_plugin_path:
+            os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)
+            os.environ.pop("QT_QPA_FONTDIR", None)
         self._app = QApplication.instance() or QApplication(sys.argv)
         self._app.setStyle("Fusion")
         self._win = MainWindow(face_path)

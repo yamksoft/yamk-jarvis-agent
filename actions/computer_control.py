@@ -20,14 +20,16 @@ try:
     pyautogui.FAILSAFE = True
     pyautogui.PAUSE    = 0.05
     _PYAUTOGUI = True
-except ImportError:
+except BaseException as exc:  # tkinter may be missing on Linux; this is a feature skip, not a hard startup failure.
     _PYAUTOGUI = False
+    print(f"[ComputerControl] PyAutoGUI unavailable: {exc}")
 
 try:
     import pyperclip
     _PYPERCLIP = True
-except ImportError:
+except BaseException as exc:
     _PYPERCLIP = False
+    print(f"[ComputerControl] Pyperclip unavailable: {exc}")
 
 def _base_dir() -> Path:
     if getattr(sys, "frozen", False):

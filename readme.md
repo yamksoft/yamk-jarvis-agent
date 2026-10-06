@@ -6,7 +6,7 @@
 A real-time voice AI that can hear, see, speak, and control your computer — on any OS. Supports Windows, macOS, and Linux. Built on the Gemini Live API for native audio streaming, delivering zero subscriptions and total digital autonomy.
 
 ---
-cd ~/Desktop/yamk-jarvis-agent && .venv-py313/bin/python main.py
+.\venv\Scripts\Activate.ps1 && python main.py
 
 ## ✨ Overview
 

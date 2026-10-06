@@ -1594,6 +1594,9 @@ class YamkLive:
                         )
                         await self._flush_pending_vision()
         except Exception as e:
+            if "1008" in str(e):
+                print(f"[YAMK] ⚠️ Recv: Server sent GoAway (1008) — reconnecting...")
+                raise Exception("1008_GOAWAY") from e
             print(f"[YAMK] ❌ Recv: {e}")
             traceback.print_exc()
             raise
@@ -2213,6 +2216,13 @@ class YamkLive:
                     continue
 
                 err_str = str(e)
+                
+                # Catch the GoAway signal to reconnect gracefully without spamming the log
+                if "1008_GOAWAY" in err_str or ("1008" in err_str and "GoAway" in err_str):
+                    self.ui.write_log("SYS: Session duration limit reached — starting fresh.")
+                    self._conn_backoff = 0
+                    continue
+
                 print(f"[YAMK] Error ({type(e).__name__}): {e}")
                 traceback.print_exc()
 

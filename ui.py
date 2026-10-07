@@ -49,6 +49,15 @@ except Exception as _e:            # noqa: BLE001 - reported, never fatal
     HAVE_VIDEO = False
     print(f"[Video] playback unavailable ({_e}) — the HUD will not show video.")
 
+try:
+    from PyQt6.QtWebEngineWidgets import QWebEngineView
+    from PyQt6.QtWebEngineCore import QWebEngineSettings
+    HAVE_WEBENGINE = True
+except Exception as _e:
+    QWebEngineView = QWebEngineSettings = None
+    HAVE_WEBENGINE = False
+    print(f"[Web] QWebEngineView unavailable ({_e}) — embedded browser will not work.")
+
 from PyQt6.QtWidgets import (
     QApplication, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QMainWindow, QPushButton, QScrollArea, QSizePolicy, QSplitter,
@@ -2873,7 +2882,7 @@ class RemoteKeyOverlay(QWidget):
             qr.make(fit=True)
             img = qr.make_image(fill_color="black", back_color="white")
             buf = BytesIO()
-            img.save(buf, format="PNG")
+            img.save(buf)
             px = QPixmap()
             px.loadFromData(buf.getvalue())
             self._qr_label.setPixmap(
@@ -2967,6 +2976,11 @@ class MainWindow(QMainWindow):
     _wake_btns_sig   = pyqtSignal()          # wake state resolved off-thread
     _video_close_sig = pyqtSignal()
     _video_mute_sig  = pyqtSignal(bool)
+    _web_open_sig    = pyqtSignal(str, str)      # url, title
+    _web_close_sig   = pyqtSignal()
+    _web_js_sig      = pyqtSignal(str)           # javascript code
+    _3d_open_sig     = pyqtSignal(str, str)      # model_path, title
+    _3d_close_sig    = pyqtSignal()
     _clipboard_sig  = pyqtSignal(str)        # clipboard text changed (thread-safe)
     _confirm_sig    = pyqtSignal(str, str)   # (title, detail) — irreversible-action gate
     _confirm_hide_sig = pyqtSignal()
@@ -3190,11 +3204,98 @@ class MainWindow(QMainWindow):
             _miss.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
             _vid_v.addWidget(_miss, stretch=1)
 
-        # Stack: 0 = animated HUD, 1 = live camera, 2 = video
+        # Stack: 0 = animated HUD, 1 = live camera, 2 = video, 3 = web, 4 = 3D
         self._hud_cam_stack = QStackedWidget()
         self._hud_cam_stack.addWidget(self.hud)
         self._hud_cam_stack.addWidget(_cam_cont)
         self._hud_cam_stack.addWidget(self._video_cont)
+
+        # --- Embedded Web Content ---
+        self._web_cont = QWidget()
+        self._web_cont.setStyleSheet(f"background: {C.BG};")
+        _web_v = QVBoxLayout(self._web_cont)
+        _web_v.setContentsMargins(0, 0, 0, 0)
+        _web_v.setSpacing(0)
+        
+        _web_hdr = QHBoxLayout()
+        _web_hdr.setContentsMargins(8, 5, 8, 5)
+        self._web_title = QLabel("🌐  BROWSER")
+        self._web_title.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        self._web_title.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        _web_hdr.addWidget(self._web_title)
+        _web_hdr.addStretch()
+        _web_x = QPushButton("✕  CLOSE")
+        _web_x.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        _web_x.setCursor(Qt.CursorShape.PointingHandCursor)
+        _web_x.setStyleSheet(f"""
+            QPushButton {{
+                color: {C.TEXT_DIM}; background: transparent;
+                border: none; padding: 2px 6px;
+            }}
+            QPushButton:hover {{ color: {C.PRI}; }}
+        """)
+        _web_x.clicked.connect(self.close_web_view)
+        _web_hdr.addWidget(_web_x)
+        _web_v.addLayout(_web_hdr)
+
+        if HAVE_WEBENGINE:
+            self._web_view = QWebEngineView()
+            self._web_view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            _web_v.addWidget(self._web_view, stretch=1)
+        else:
+            self._web_view = None
+            _miss_web = QLabel("Web browser is not available (PyQt6-WebEngine missing).")
+            _miss_web.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            _miss_web.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
+            _web_v.addWidget(_miss_web, stretch=1)
+            
+        self._hud_cam_stack.addWidget(self._web_cont)
+
+        # --- 3D Model View ---
+        self._3d_cont = QWidget()
+        self._3d_cont.setStyleSheet(f"background: {C.BG};")
+        _3d_v = QVBoxLayout(self._3d_cont)
+        _3d_v.setContentsMargins(0, 0, 0, 0)
+        _3d_v.setSpacing(0)
+        
+        _3d_hdr = QHBoxLayout()
+        _3d_hdr.setContentsMargins(8, 5, 8, 5)
+        self._3d_title = QLabel("🧊  3D MODEL")
+        self._3d_title.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        self._3d_title.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        _3d_hdr.addWidget(self._3d_title)
+        _3d_hdr.addStretch()
+        _3d_x = QPushButton("✕  CLOSE")
+        _3d_x.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        _3d_x.setCursor(Qt.CursorShape.PointingHandCursor)
+        _3d_x.setStyleSheet(f"""
+            QPushButton {{
+                color: {C.TEXT_DIM}; background: transparent;
+                border: none; padding: 2px 6px;
+            }}
+            QPushButton:hover {{ color: {C.PRI}; }}
+        """)
+        _3d_x.clicked.connect(self.close_3d_view)
+        _3d_hdr.addWidget(_3d_x)
+        _3d_v.addLayout(_3d_hdr)
+
+        if HAVE_WEBENGINE:
+            self._3d_view = QWebEngineView()
+            if QWebEngineSettings:
+                s = self._3d_view.settings()
+                s.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
+                s.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
+                s.setAttribute(QWebEngineSettings.WebAttribute.AllowRunningInsecureContent, True)
+            self._3d_view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            _3d_v.addWidget(self._3d_view, stretch=1)
+        else:
+            self._3d_view = QLabel("3D Model View requires PyQt6-WebEngine.")
+            self._3d_view.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._3d_view.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
+            self._3d_view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            _3d_v.addWidget(self._3d_view, stretch=1)
+        
+        self._hud_cam_stack.addWidget(self._3d_cont)
 
         self._center_split = QSplitter(Qt.Orientation.Vertical)
         self._center_split.setStyleSheet(f"""
@@ -3252,6 +3353,11 @@ class MainWindow(QMainWindow):
         self._video_open_sig.connect(self._on_video_open)
         self._video_close_sig.connect(self._on_video_close)
         self._video_mute_sig.connect(self._on_video_mute)
+        self._web_open_sig.connect(self._on_web_open)
+        self._web_close_sig.connect(self._on_web_close)
+        self._web_js_sig.connect(self._on_web_js)
+        self._3d_open_sig.connect(self._on_3d_open)
+        self._3d_close_sig.connect(self._on_3d_close)
         self._clipboard_sig.connect(self._show_clipboard_panel)
         self._wake_dl_sig.connect(self._on_wake_install_done)
         self._quiz_sig.connect(self._show_quiz)
@@ -3501,6 +3607,95 @@ class MainWindow(QMainWindow):
 
     def video_is_playing(self) -> bool:
         return bool(self._video_on)
+
+    # --- Web Browser View --------------------------------------------------
+    def _on_web_open(self, url: str, title: str) -> None:
+        self._cam_stop.set()
+        if self._video_on:
+            self._on_video_close()
+            
+        self._web_title.setText(f"🌐  {(title or 'BROWSER')[:44].upper()}")
+        if self._web_view:
+            self._web_view.setUrl(QUrl(url))
+        self._hud_cam_stack.setCurrentIndex(3)
+
+    def _on_web_close(self) -> None:
+        if self._web_view:
+            self._web_view.setUrl(QUrl("about:blank"))
+        self._hud_cam_stack.setCurrentIndex(0)
+
+    def _on_web_js(self, script: str) -> None:
+        if self._web_view and self._hud_cam_stack.currentIndex() == 3:
+            self._web_view.page().runJavaScript(script)
+        
+    def open_web_view(self, url: str, title: str = "") -> None:
+        self._web_open_sig.emit(url, title)
+        
+    def close_web_view(self) -> None:
+        self._web_close_sig.emit()
+
+    def run_web_javascript(self, script: str) -> None:
+        self._web_js_sig.emit(script)
+
+    # --- 3D Model View -----------------------------------------------------
+    def _on_3d_open(self, model_path: str, title: str) -> None:
+        self._cam_stop.set()
+        if self._video_on:
+            self._on_video_close()
+            
+        self._3d_title.setText(f"🧊  {(title or '3D MODEL')[:44].upper()}")
+        
+        if HAVE_WEBENGINE and isinstance(self._3d_view, QWebEngineView):
+            url = model_path
+            src_url = url
+            
+            import base64
+            from pathlib import Path
+            if url and not url.startswith("http") and not url.startswith("data:"):
+                p = Path(url).expanduser()
+                if p.exists():
+                    try:
+                        mime = "model/gltf-binary" if p.suffix.lower() == ".glb" else "model/gltf+json"
+                        b64 = base64.b64encode(p.read_bytes()).decode('utf-8')
+                        src_url = f"data:{mime};base64,{b64}"
+                    except Exception as e:
+                        print(f"Error encoding 3D model: {e}")
+                        
+            html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body {{ margin: 0; padding: 0; background-color: {C.BG}; color: {C.TEXT_DIM}; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }}
+                    model-viewer {{ width: 100%; height: 100%; outline: none; }}
+                </style>
+                <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+            </head>
+            <body>
+                <model-viewer src="{src_url}" auto-rotate camera-controls shadow-intensity="1" alt="A 3D model"></model-viewer>
+            </body>
+            </html>
+            """
+            import tempfile, os
+            tmp_path = os.path.join(tempfile.gettempdir(), "yamk_3d_viewer.html")
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(html)
+            self._3d_view.setUrl(QUrl.fromLocalFile(tmp_path))
+        else:
+            self._3d_view.setText(f"Cannot render 3D: WebEngine missing.\\nTarget: {model_path}")
+            
+        self._hud_cam_stack.setCurrentIndex(4)
+
+    def _on_3d_close(self) -> None:
+        if HAVE_WEBENGINE and getattr(self, "_3d_view", None) and isinstance(self._3d_view, QWebEngineView):
+            self._3d_view.setHtml("")
+        self._hud_cam_stack.setCurrentIndex(0)
+        
+    def open_3d_view(self, model_path: str, title: str = "") -> None:
+        self._3d_open_sig.emit(model_path, title)
+        
+    def close_3d_view(self) -> None:
+        self._3d_close_sig.emit()
 
     # ------------------------------------------------------------------
     # Icon generation — arc-reactor style, rendered with Pillow
@@ -5854,6 +6049,21 @@ class YamkUI:
     def stop_camera_stream(self) -> None:
         """Thread-safe: stop the live camera feed."""
         self._win.stop_camera_stream()
+
+    def open_web_view(self, url: str, title: str = "") -> None:
+        self._win._web_open_sig.emit(str(url or ""), str(title or ""))
+        
+    def close_web_view(self) -> None:
+        self._win._web_close_sig.emit()
+        
+    def run_web_javascript(self, script: str) -> None:
+        self._win._web_js_sig.emit(str(script or ""))
+
+    def open_3d_view(self, model_path: str, title: str = "") -> None:
+        self._win._3d_open_sig.emit(str(model_path or ""), str(title or ""))
+
+    def close_3d_view(self) -> None:
+        self._win._3d_close_sig.emit()
 
     @property
     def assistant_name(self) -> str:

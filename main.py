@@ -1597,6 +1597,9 @@ class YamkLive:
             if "1008" in str(e):
                 print(f"[YAMK] ⚠️ Recv: Server sent GoAway (1008) — reconnecting...")
                 raise Exception("1008_GOAWAY") from e
+            if "1011" in str(e):
+                print(f"[YAMK] ⚠️ Recv: Server unavailable (1011) — reconnecting...")
+                raise Exception("1011_UNAVAILABLE") from e
             print(f"[YAMK] ❌ Recv: {e}")
             traceback.print_exc()
             raise
@@ -2216,11 +2219,18 @@ class YamkLive:
                     continue
 
                 err_str = str(e)
+                if hasattr(e, "exceptions"):
+                    err_str = "".join(traceback.format_exception(type(e), e, e.__traceback__))
                 
-                # Catch the GoAway signal to reconnect gracefully without spamming the log
+                # Catch the GoAway/Unavailable signal to reconnect gracefully without spamming the log
                 if "1008_GOAWAY" in err_str or ("1008" in err_str and "GoAway" in err_str):
-                    self.ui.write_log("SYS: Session duration limit reached — starting fresh.")
+                    self.ui.write_log("SYS: Session duration limit reached (1008) — starting fresh.")
                     self._conn_backoff = 0
+                    continue
+                if "1011_UNAVAILABLE" in err_str or ("1011" in err_str and "unavailable" in err_str):
+                    self.ui.write_log("SYS: Service unavailable (1011) — reconnecting...")
+                    self._conn_backoff = 3
+                    await asyncio.sleep(self._conn_backoff)
                     continue
 
                 print(f"[YAMK] Error ({type(e).__name__}): {e}")
